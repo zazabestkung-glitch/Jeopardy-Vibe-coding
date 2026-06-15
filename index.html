@@ -75,14 +75,22 @@
         <div id="dailyDoubleBanner" class="hidden text-6xl md:text-8xl font-black text-amber-400 tracking-widest mb-8 uppercase text-center animate-bounce">
             🔥 Daily Double! 🔥
         </div>
-        <div id="modalContent" class="text-center max-w-4xl">
+        <div id="modalContent" class="text-center max-w-4xl w-full px-4">
             <h2 id="modalCategory" class="text-amber-400 text-2xl font-bold uppercase tracking-widest mb-2">Category</h2>
             <div id="modalValue" class="text-xl text-slate-400 mb-6">$200</div>
             <p id="modalText" class="text-3xl md:text-5xl font-serif font-bold leading-relaxed mb-12">Clue text...</p>
             
-            <div id="modalHostButtons" class="hidden flex gap-4 justify-center">
-                <button onclick="sendAction('revealAnswer', {})" class="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg font-bold text-lg">Reveal Answer</button>
-                <button onclick="sendAction('closeClue', {})" class="bg-slate-700 hover:bg-slate-600 px-6 py-3 rounded-lg font-bold text-lg">Close & Back</button>
+            <div id="modalHostButtons" class="hidden flex flex-col gap-6 items-center w-full">
+                <div class="flex gap-4 justify-center">
+                    <button onclick="sendAction('revealAnswer', {})" class="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg font-bold text-lg shadow-md">Reveal Answer</button>
+                    <button onclick="sendAction('closeClue', {})" class="bg-slate-700 hover:bg-slate-600 px-6 py-3 rounded-lg font-bold text-lg shadow-md">Close & Back</button>
+                </div>
+                
+                <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-700 w-full max-w-2xl">
+                    <div class="text-xs uppercase font-bold tracking-wider text-slate-400 mb-3">Award Points For This Clue</div>
+                    <div id="modalScorePanel" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        </div>
+                </div>
             </div>
         </div>
     </div>
@@ -126,12 +134,10 @@
             }
         }
 
-        // --- Connection / Room Number Sync Engine ---
+        // --- Connection Engine ---
         function updateRoomConnection() {
             const roomNum = document.getElementById('roomInput').value || "101";
             const statusIndicator = document.getElementById('connStatus');
-            
-            // Generate distinct internal string path using the custom room number
             const targetTopic = `jeopardy_global_room_channel_${roomNum}`;
 
             if (mqttClient) {
@@ -146,8 +152,6 @@
             mqttClient.on('connect', () => {
                 mqttClient.subscribe(currentRoomTopic);
                 statusIndicator.className = "inline-block w-2.5 h-2.5 rounded-full bg-emerald-500";
-                statusIndicator.title = "Connected to Room " + roomNum;
-                // If controller reconnects, broadcast state immediately
                 if(gameState.isController) sendAction('syncState', {});
             });
 
@@ -227,13 +231,13 @@
                     sendAction('syncState', {});
                     render();
                 } catch (error) {
-                    alert("Invalid game configuration file.");
+                    alert("Invalid file structure.");
                 }
             };
             reader.readAsText(file);
         }
 
-        // --- Mode Shift Logic ---
+        // --- UI Modes ---
         function toggleMode() {
             const checkbox = document.getElementById('modeToggle');
             gameState.isController = checkbox.checked;
@@ -247,7 +251,7 @@
                 label.classList.add("text-blue-400");
                 hostControls.classList.remove("hidden");
                 modalHostButtons.classList.remove("hidden");
-                sendAction('syncState', {}); // Push current setup rules out
+                sendAction('syncState', {});
             } else {
                 label.innerText = "Screen Mode (TV)";
                 label.classList.remove("text-blue-400");
@@ -257,28 +261,22 @@
             render();
         }
 
-        // --- Header Column Editing ---
         function editCategoryHeader(colIndex) {
-            if (!gameState.isController) return; // Only allow editing in controller mode
+            if (!gameState.isController) return;
             const currentName = gameState.categories[colIndex] || `Category ${colIndex + 1}`;
-            const newName = prompt(`Enter new title for Column header ${colIndex + 1}:`, currentName);
-            if (newName !== null && newName.trim() !== "") {
+            const newName = prompt(`Enter title for Column ${colIndex + 1}:`, currentName);
+            if (newName) {
                 gameState.categories[colIndex] = newName;
                 sendAction('syncState', {});
                 render();
             }
         }
 
-        // --- State Adjusters ---
         function adjustGrid(type, delta) {
             if(type === 'col') gameState.cols = Math.max(1, Math.min(7, gameState.cols + delta));
             if(type === 'row') gameState.rows = Math.max(1, Math.min(6, gameState.rows + delta));
             sendAction('syncState', {});
         }
-
-        document.addEventListener("DOMContentLoaded", () => {
-            updateRoomConnection();
-        });
 
         function adjustPlayers(delta) {
             if (delta > 0 && gameState.players.length < 6) {
@@ -317,7 +315,14 @@
             sendAction('syncState', {});
         }
 
-        // --- Rendering Engine ---
+        function renamePlayer(index, newName) {
+            if(newName) {
+                gameState.players[index].name = newName;
+                sendAction('syncState', {});
+            }
+        }
+
+        // --- Rendering Layouts ---
         function render() {
             document.getElementById('playerCountDisplay').innerText = gameState.players.length;
             renderBoard();
@@ -330,7 +335,6 @@
             gridContainer.style.gridTemplateColumns = `repeat(${gameState.cols}, minmax(0, 1fr))`;
             gridContainer.innerHTML = '';
 
-            // Generate Column Headers
             for (let c = 0; c < gameState.cols; c++) {
                 const header = document.createElement('div');
                 const catName = gameState.categories[c] || `Category ${c+1}`;
@@ -346,7 +350,6 @@
                 gridContainer.appendChild(header);
             }
 
-            // Generate Board Grid
             for (let r = 0; r < gameState.rows; r++) {
                 for (let c = 0; c < gameState.cols; c++) {
                     const key = `${c}-${r}`;
@@ -388,11 +391,7 @@
                 if (gameState.isController) {
                     pBox.innerHTML = `
                         <input type="text" value="${player.name}" onchange="renamePlayer(${index}, this.value)" class="bg-transparent font-bold text-sm text-slate-300 text-center w-full focus:bg-slate-700 rounded mb-1">
-                        <div class="text-2xl font-black text-emerald-400 mb-1">${player.score}</div>
-                        <div class="flex gap-1 justify-center text-xs">
-                            <button onclick="updateScore(${index}, 200)" class="bg-emerald-700 px-1 rounded font-bold">+200</button>
-                            <button onclick="updateScore(${index}, -200)" class="bg-rose-700 px-1 rounded font-bold">-200</button>
-                        </div>
+                        <div class="text-2xl font-black text-emerald-400">${player.score}</div>
                     `;
                 } else {
                     pBox.innerHTML = `
@@ -402,13 +401,6 @@
                 }
                 container.appendChild(pBox);
             });
-        }
-
-        function renamePlayer(index, newName) {
-            if(newName) {
-                gameState.players[index].name = newName;
-                sendAction('syncState', {});
-            }
         }
 
         function renderModal() {
@@ -437,8 +429,33 @@
                 textElement.innerText = clue.question;
                 textElement.className = "text-3xl md:text-5xl font-serif font-bold text-white text-center leading-relaxed mb-12";
             }
+
+            // --- NEW FEATURE: DYNAMIC MODAL SCORE PANEL FOR THE HOST ---
+            const scorePanel = document.getElementById('modalScorePanel');
+            scorePanel.innerHTML = '';
+
+            if (gameState.isController) {
+                // If it's a Daily Double, allow custom prompt wagers, otherwise use standard card value
+                let targetValue = clue.value;
+
+                gameState.players.forEach((player, idx) => {
+                    const row = document.createElement('div');
+                    row.className = "bg-slate-800 p-2 rounded border border-slate-700 text-center flex flex-col items-center justify-between";
+                    row.innerHTML = `
+                        <div class="text-xs font-medium text-slate-300 truncate w-full mb-1">${player.name}</div>
+                        <div class="flex gap-2">
+                            <button onclick="updateScore(${idx}, ${targetValue})" class="bg-emerald-600 hover:bg-emerald-500 text-xs px-2 py-1 rounded font-black text-white">+ $${targetValue}</button>
+                            <button onclick="updateScore(${idx}, -${targetValue})" class="bg-rose-600 hover:bg-rose-500 text-xs px-2 py-1 rounded font-black text-white">- $${targetValue}</button>
+                        </div>
+                    `;
+                    scorePanel.appendChild(row);
+                });
+            }
         }
 
+        document.addEventListener("DOMContentLoaded", () => {
+            updateRoomConnection();
+        });
         initClues();
         render();
     </script>
