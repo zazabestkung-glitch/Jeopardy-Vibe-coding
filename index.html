@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jeopardy Room Controller</title>
+    <title>Jeopardy Media Studio</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
@@ -71,36 +71,90 @@
             </div>
     </div>
 
-    <div id="clueModal" class="fixed inset-0 bg-blue-950/95 flex flex-col justify-center items-center p-6 hidden z-50">
-        <div id="dailyDoubleBanner" class="hidden text-6xl md:text-8xl font-black text-amber-400 tracking-widest mb-8 uppercase text-center animate-bounce">
+    <div id="clueModal" class="fixed inset-0 bg-blue-950/95 flex flex-col justify-center items-center p-6 hidden z-50 overflow-y-auto">
+        <div id="dailyDoubleBanner" class="hidden text-5xl font-black text-amber-400 tracking-widest mb-4 uppercase text-center animate-bounce">
             🔥 Daily Double! 🔥
         </div>
-        <div id="modalContent" class="text-center max-w-4xl w-full px-4">
-            <h2 id="modalCategory" class="text-amber-400 text-2xl font-bold uppercase tracking-widest mb-2">Category</h2>
-            <div id="modalValue" class="text-xl text-slate-400 mb-6">$200</div>
-            <p id="modalText" class="text-3xl md:text-5xl font-serif font-bold leading-relaxed mb-12">Clue text...</p>
+        
+        <div id="modalContent" class="text-center max-w-4xl w-full px-4 flex flex-col items-center">
+            <h2 id="modalCategory" class="text-amber-400 text-xl font-bold uppercase tracking-widest mb-1">Category</h2>
+            <div id="modalValue" class="text-lg text-slate-400 mb-4">$200</div>
             
-            <div id="modalHostButtons" class="hidden flex flex-col gap-6 items-center w-full">
+            <div id="modalMediaContainer" class="w-full max-w-xl mb-6 hidden">
+                </div>
+
+            <p id="modalText" class="text-2xl md:text-4xl font-serif font-bold leading-relaxed mb-8">Clue text...</p>
+            
+            <div id="modalHostButtons" class="hidden flex flex-col gap-4 items-center w-full">
                 <div class="flex gap-4 justify-center">
-                    <button onclick="sendAction('revealAnswer', {})" class="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-lg font-bold text-lg shadow-md">Reveal Answer</button>
-                    <button onclick="sendAction('closeClue', {})" class="bg-slate-700 hover:bg-slate-600 px-6 py-3 rounded-lg font-bold text-lg shadow-md">Close & Back</button>
+                    <button onclick="sendAction('revealAnswer', {})" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-lg font-bold">Reveal Answer</button>
+                    <button onclick="sendAction('closeClue', {})" class="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-lg font-bold">Close & Back</button>
                 </div>
                 
                 <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-700 w-full max-w-2xl">
-                    <div class="text-xs uppercase font-bold tracking-wider text-slate-400 mb-3">Award Points For This Clue</div>
-                    <div id="modalScorePanel" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        </div>
+                    <div id="modalScorePanel" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
                 </div>
             </div>
         </div>
     </div>
 
+    <div id="mediaEditModal" class="fixed inset-0 bg-black/80 flex justify-center items-center p-4 hidden z-50">
+        <div class="bg-slate-800 p-6 rounded-xl max-w-md w-full border border-slate-700">
+            <h3 class="text-xl font-bold mb-4 text-yellow-400">Edit Clue & Media Assets</h3>
+            
+            <div class="space-y-3 text-sm">
+                <div>
+                    <label class="block text-slate-400 font-bold mb-1">Clue text / Question:</label>
+                    <textarea id="editQuestion" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500" rows="2"></textarea>
+                </div>
+                <div>
+                    <label class="block text-slate-400 font-bold mb-1">Answer:</label>
+                    <input type="text" id="editAnswer" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-slate-400 font-bold mb-1">Point Value:</label>
+                        <input type="number" id="editValue" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 font-bold mb-1">Media Attachment:</label>
+                        <select id="editMediaType" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500" onchange="toggleMediaInputFields()">
+                            <option value="none">None</option>
+                            <option value="link">Web Image Link</option>
+                            <option value="file">Upload Local Image</option>
+                            <option value="youtube">YouTube Video Link</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="mediaLinkField" class="hidden">
+                    <label class="block text-slate-400 font-bold mb-1">Image URL:</label>
+                    <input type="text" id="editMediaUrl" placeholder="https://..." class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
+                </div>
+
+                <div id="mediaFileField" class="hidden">
+                    <label class="block text-slate-400 font-bold mb-1">Choose Local Image File:</label>
+                    <input type="file" id="editMediaFile" accept="image/*" class="w-full bg-slate-900 text-xs border border-slate-600 p-1 rounded cursor-pointer" onchange="handleLocalImageUpload(event)">
+                </div>
+
+                <div id="mediaYoutubeField" class="hidden">
+                    <label class="block text-slate-400 font-bold mb-1">YouTube Link / URL:</label>
+                    <input type="text" id="editYoutubeUrl" placeholder="https://www.youtube.com/watch?v=..." class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <div class="flex gap-3 justify-end mt-6">
+                <button onclick="closeMediaEditor()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded font-bold text-sm">Cancel</button>
+                <button onclick="saveMediaAssetChanges()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded font-bold text-sm text-white">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // Real-time network sync client
         let mqttClient = null;
         let currentRoomTopic = "";
+        let editingTargetKey = null; // Holds target key context while asset editor is active
 
-        // Core Game State
         let gameState = {
             isController: false,
             rows: 5,
@@ -116,7 +170,6 @@
             showingAnswer: false
         };
 
-        // Initialize grid default templates
         function initClues() {
             for(let c=0; c<10; c++) {
                 for(let r=0; r<10; r++) {
@@ -127,14 +180,16 @@
                             answer: `What is the correct answer?`,
                             value: (r + 1) * 200,
                             isDD: false,
-                            isRead: false
+                            isRead: false,
+                            mediaType: "none", // none, link, file, youtube
+                            mediaUrl: ""
                         };
                     }
                 }
             }
         }
 
-        // --- Connection Engine ---
+        // --- Connection Sync Setup ---
         function updateRoomConnection() {
             const roomNum = document.getElementById('roomInput').value || "101";
             const statusIndicator = document.getElementById('connStatus');
@@ -196,6 +251,92 @@
             render();
         }
 
+        // --- Media Input Assistant ---
+        function openMediaEditor(col, row, event) {
+            event.stopPropagation();
+            editingTargetKey = `${col}-${row}`;
+            const clue = gameState.clues[editingTargetKey];
+
+            document.getElementById('editQuestion').value = clue.question;
+            document.getElementById('editAnswer').value = clue.answer;
+            document.getElementById('editValue').value = clue.value;
+            document.getElementById('editMediaType').value = clue.mediaType || "none";
+            
+            // Clean inputs
+            document.getElementById('editMediaUrl').value = clue.mediaType === 'link' ? clue.mediaUrl : "";
+            document.getElementById('editYoutubeUrl').value = clue.mediaType === 'youtube' ? clue.mediaUrl : "";
+            document.getElementById('editMediaFile').value = "";
+            
+            // Temporarily warehouse file data locally inside variable attribute if loaded
+            document.getElementById('editMediaFile').dataset.base64 = clue.mediaType === 'file' ? clue.mediaUrl : "";
+
+            toggleMediaInputFields();
+            document.getElementById('mediaEditModal').classList.remove('hidden');
+        }
+
+        function toggleMediaInputFields() {
+            const type = document.getElementById('editMediaType').value;
+            document.getElementById('mediaLinkField').classList.toggle('hidden', type !== 'link');
+            document.getElementById('mediaFileField').classList.toggle('hidden', type !== 'file');
+            document.getElementById('mediaYoutubeField').classList.toggle('hidden', type !== 'youtube');
+        }
+
+        function handleLocalImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Enforce small assets to fit transaction limits over websocket pipes
+            if (file.size > 2 * 1024 * 1024) {
+                alert("File size is too large! Please upload images smaller than 2MB.");
+                event.target.value = "";
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                // Stash data inside data asset property mapping
+                document.getElementById('editMediaFile').dataset.base64 = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function saveMediaAssetChanges() {
+            const clue = gameState.clues[editingTargetKey];
+            clue.question = document.getElementById('editQuestion').value;
+            clue.answer = document.getElementById('editAnswer').value;
+            clue.value = parseInt(document.getElementById('editValue').value, 10) || clue.value;
+            
+            const mediaType = document.getElementById('editMediaType').value;
+            clue.mediaType = mediaType;
+
+            if (mediaType === 'none') clue.mediaUrl = "";
+            else if (mediaType === 'link') clue.mediaUrl = document.getElementById('editMediaUrl').value;
+            else if (mediaType === 'file') clue.mediaUrl = document.getElementById('editMediaFile').dataset.base64 || "";
+            else if (mediaType === 'youtube') {
+                let rawUrl = document.getElementById('editYoutubeUrl').value;
+                clue.mediaUrl = cleanYoutubeUrl(rawUrl);
+            }
+
+            closeMediaEditor();
+            sendAction('syncState', {});
+            render();
+        }
+
+        function closeMediaEditor() {
+            document.getElementById('mediaEditModal').classList.add('hidden');
+            editingTargetKey = null;
+        }
+
+        function cleanYoutubeUrl(url) {
+            // Helper to parse strings to direct clean embed iframe links
+            let regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            let match = url.match(regExp);
+            if (match && match[2].length === 11) {
+                return `https://www.youtube.com/embed/${match[2]}`;
+            }
+            return url; // Fallback
+        }
+
         // --- Save / Load Logic ---
         function saveBoardToFile() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
@@ -237,7 +378,7 @@
             reader.readAsText(file);
         }
 
-        // --- UI Modes ---
+        // --- Core Application Logic ---
         function toggleMode() {
             const checkbox = document.getElementById('modeToggle');
             gameState.isController = checkbox.checked;
@@ -299,22 +440,6 @@
             sendAction('syncState', {});
         }
 
-        function editClueText(col, row, event) {
-            event.stopPropagation();
-            const key = `${col}-${row}`;
-            const currentClue = gameState.clues[key];
-
-            const newQ = prompt("Enter Clue / Question:", currentClue.question);
-            const newA = prompt("Enter Answer:", currentClue.answer);
-            const newVal = prompt("Enter Point Value:", currentClue.value);
-
-            if(newQ) gameState.clues[key].question = newQ;
-            if(newA) gameState.clues[key].answer = newA;
-            if(newVal) gameState.clues[key].value = parseInt(newVal, 10) || currentClue.value;
-            
-            sendAction('syncState', {});
-        }
-
         function renamePlayer(index, newName) {
             if(newName) {
                 gameState.players[index].name = newName;
@@ -322,7 +447,7 @@
             }
         }
 
-        // --- Rendering Layouts ---
+        // --- Rendering Engine ---
         function render() {
             document.getElementById('playerCountDisplay').innerText = gameState.players.length;
             renderBoard();
@@ -364,12 +489,16 @@
                         
                         if (gameState.isController) {
                             card.setAttribute('onclick', `sendAction('openClue', {col: ${c}, row: ${r}})`);
+                            
+                            // Check mark helper symbol indicates present media attachments on card matrix cell
+                            const mediaIndicator = (clue.mediaType && clue.mediaType !== 'none') ? "🖼️ " : "";
+                            
                             card.innerHTML = `
                                 <div class="flex justify-between w-full">
                                     <button onclick="toggleDD(${c}, ${r}, event)" class="text-[10px] px-1 rounded ${clue.isDD ? 'bg-amber-500 text-slate-900 font-bold' : 'bg-slate-700 text-slate-300'}">DD</button>
-                                    <button onclick="editClueText(${c}, ${r}, event)" class="text-[10px] bg-slate-700 hover:bg-slate-600 px-1 rounded text-white">✏️</button>
+                                    <button onclick="openMediaEditor(${c}, ${r}, event)" class="text-[10px] bg-slate-700 hover:bg-slate-600 px-1 rounded text-white">✏️</button>
                                 </div>
-                                <span class="mb-2">$${clue.value}</span>
+                                <span class="mb-2 text-sm md:text-xl">${mediaIndicator}$${clue.value}</span>
                             `;
                         } else {
                             card.innerHTML = `<div class="m-auto">$${clue.value}</div>`;
@@ -405,8 +534,11 @@
 
         function renderModal() {
             const modal = document.getElementById('clueModal');
+            const mediaContainer = document.getElementById('modalMediaContainer');
+            
             if (!gameState.activeClue) {
                 modal.classList.add('hidden');
+                mediaContainer.innerHTML = ''; // Wipe embed content if closed
                 return;
             }
 
@@ -421,23 +553,49 @@
             if (clue.isDD) ddBanner.classList.remove('hidden');
             else ddBanner.classList.add('hidden');
 
+            // --- RENDER CLUE QUESTION MEDIA ATTACHMENTS ---
+            mediaContainer.innerHTML = '';
+            
+            // Only render media attachments while displaying the question, clear it on answer flip
+            if (!gameState.showingAnswer && clue.mediaType && clue.mediaType !== 'none' && clue.mediaUrl) {
+                mediaContainer.classList.remove('hidden');
+                
+                if (clue.mediaType === 'link' || clue.mediaType === 'file') {
+                    const img = document.createElement('img');
+                    img.src = clue.mediaUrl;
+                    img.className = "mx-auto max-h-64 md:max-h-80 object-contain rounded-lg border border-slate-700 shadow-md";
+                    mediaContainer.appendChild(img);
+                } else if (clue.mediaType === 'youtube') {
+                    const wrap = document.createElement('div');
+                    wrap.className = "aspect-video w-full max-w-xl mx-auto";
+                    wrap.innerHTML = `
+                        <iframe class="w-full h-full rounded-lg border border-slate-700 shadow-md" 
+                                src="${clue.mediaUrl}" 
+                                frameborder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowfullscreen>
+                        </iframe>`;
+                    mediaContainer.appendChild(wrap);
+                }
+            } else {
+                mediaContainer.classList.add('hidden');
+            }
+
             const textElement = document.getElementById('modalText');
             if (gameState.showingAnswer) {
                 textElement.innerText = clue.answer;
-                textElement.className = "text-3xl md:text-5xl font-serif font-bold text-emerald-400 text-center leading-relaxed mb-12";
+                textElement.className = "text-3xl md:text-5xl font-serif font-bold text-emerald-400 text-center leading-relaxed mb-6";
             } else {
                 textElement.innerText = clue.question;
-                textElement.className = "text-3xl md:text-5xl font-serif font-bold text-white text-center leading-relaxed mb-12";
+                textElement.className = "text-2xl md:text-4xl font-serif font-bold text-white text-center leading-relaxed mb-6";
             }
 
-            // --- NEW FEATURE: DYNAMIC MODAL SCORE PANEL FOR THE HOST ---
+            // Dynamic Modal Score Setup
             const scorePanel = document.getElementById('modalScorePanel');
             scorePanel.innerHTML = '';
 
             if (gameState.isController) {
-                // If it's a Daily Double, allow custom prompt wagers, otherwise use standard card value
                 let targetValue = clue.value;
-
                 gameState.players.forEach((player, idx) => {
                     const row = document.createElement('div');
                     row.className = "bg-slate-800 p-2 rounded border border-slate-700 text-center flex flex-col items-center justify-between";
