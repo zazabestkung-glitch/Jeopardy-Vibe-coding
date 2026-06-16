@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jeopardy Media Studio</title>
+    <title>Jeopardy Advanced Media Studio</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
@@ -98,54 +98,86 @@
         </div>
     </div>
 
-    <div id="mediaEditModal" class="fixed inset-0 bg-black/80 flex justify-center items-center p-4 hidden z-50">
-        <div class="bg-slate-800 p-6 rounded-xl max-w-md w-full border border-slate-700">
-            <h3 class="text-xl font-bold mb-4 text-yellow-400">Edit Clue & Media Assets</h3>
+    <div id="mediaEditModal" class="fixed inset-0 bg-black/80 flex justify-center items-center p-4 hidden z-50 overflow-y-auto">
+        <div class="bg-slate-800 p-6 rounded-xl max-w-xl w-full border border-slate-700 my-8">
+            <h3 class="text-xl font-bold mb-4 text-yellow-400 flex items-center gap-2">⚙️ Edit Clue Studio</h3>
             
-            <div class="space-y-3 text-sm">
+            <div class="space-y-4 text-sm">
                 <div>
-                    <label class="block text-slate-400 font-bold mb-1">Clue text / Question:</label>
-                    <textarea id="editQuestion" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500" rows="2"></textarea>
+                    <label class="block text-slate-400 font-bold mb-1">Point Value:</label>
+                    <input type="number" id="editValue" class="bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500 w-32">
                 </div>
-                <div>
-                    <label class="block text-slate-400 font-bold mb-1">Answer:</label>
-                    <input type="text" id="editAnswer" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label class="block text-slate-400 font-bold mb-1">Point Value:</label>
-                        <input type="number" id="editValue" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
+
+                <div class="h-px bg-slate-700 my-2"></div>
+
+                <div class="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                    <h4 class="text-blue-400 font-bold mb-2 uppercase tracking-wide text-xs">🔹 Step 1: The Question Setup</h4>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-slate-400 font-medium mb-1">Clue / Question Text:</label>
+                            <textarea id="editQuestion" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500" rows="2"></textarea>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-slate-400 font-medium mb-1">Question Media Type:</label>
+                                <select id="editQMediaType" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500" onchange="toggleMediaInputFields('Q')">
+                                    <option value="none">None</option>
+                                    <option value="link">Web Image Link</option>
+                                    <option value="file">Upload Local Image</option>
+                                    <option value="youtube">YouTube Video Link</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <div id="mediaQLinkField" class="hidden w-full">
+                                    <input type="text" id="editQMediaUrl" placeholder="Image URL (https://...)" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
+                                </div>
+                                <div id="mediaQFileField" class="hidden w-full">
+                                    <input type="file" id="editQMediaFile" accept="image/*" class="w-full bg-slate-900 text-xs border border-slate-600 p-1 rounded cursor-pointer" onchange="handleLocalImageUpload(event, 'Q')">
+                                </div>
+                                <div id="mediaQYoutubeField" class="hidden w-full">
+                                    <input type="text" id="editQYoutubeUrl" placeholder="YouTube Link" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-slate-400 font-bold mb-1">Media Attachment:</label>
-                        <select id="editMediaType" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500" onchange="toggleMediaInputFields()">
-                            <option value="none">None</option>
-                            <option value="link">Web Image Link</option>
-                            <option value="file">Upload Local Image</option>
-                            <option value="youtube">YouTube Video Link</option>
-                        </select>
+                </div>
+
+                <div class="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                    <h4 class="text-emerald-400 font-bold mb-2 uppercase tracking-wide text-xs">🔸 Step 2: The Answer Setup</h4>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-slate-400 font-medium mb-1">Correct Answer Text:</label>
+                            <input type="text" id="editAnswer" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-slate-400 font-medium mb-1">Answer Media Type:</label>
+                                <select id="editAMediaType" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500" onchange="toggleMediaInputFields('A')">
+                                    <option value="none">None</option>
+                                    <option value="link">Web Image Link</option>
+                                    <option value="file">Upload Local Image</option>
+                                    <option value="youtube">YouTube Video Link</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <div id="mediaALinkField" class="hidden w-full">
+                                    <input type="text" id="editAMediaUrl" placeholder="Image URL (https://...)" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
+                                </div>
+                                <div id="mediaAFileField" class="hidden w-full">
+                                    <input type="file" id="editAMediaFile" accept="image/*" class="w-full bg-slate-900 text-xs border border-slate-600 p-1 rounded cursor-pointer" onchange="handleLocalImageUpload(event, 'A')">
+                                </div>
+                                <div id="mediaAYoutubeField" class="hidden w-full">
+                                    <input type="text" id="editAYoutubeUrl" placeholder="YouTube Link" class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-
-                <div id="mediaLinkField" class="hidden">
-                    <label class="block text-slate-400 font-bold mb-1">Image URL:</label>
-                    <input type="text" id="editMediaUrl" placeholder="https://..." class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
-                </div>
-
-                <div id="mediaFileField" class="hidden">
-                    <label class="block text-slate-400 font-bold mb-1">Choose Local Image File:</label>
-                    <input type="file" id="editMediaFile" accept="image/*" class="w-full bg-slate-900 text-xs border border-slate-600 p-1 rounded cursor-pointer" onchange="handleLocalImageUpload(event)">
-                </div>
-
-                <div id="mediaYoutubeField" class="hidden">
-                    <label class="block text-slate-400 font-bold mb-1">YouTube Link / URL:</label>
-                    <input type="text" id="editYoutubeUrl" placeholder="https://www.youtube.com/watch?v=..." class="w-full bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500">
                 </div>
             </div>
 
             <div class="flex gap-3 justify-end mt-6">
                 <button onclick="closeMediaEditor()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded font-bold text-sm">Cancel</button>
-                <button onclick="saveMediaAssetChanges()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded font-bold text-sm text-white">Save Changes</button>
+                <button onclick="saveMediaAssetChanges()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded font-bold text-sm text-white shadow-md">Save Configuration</button>
             </div>
         </div>
     </div>
@@ -153,7 +185,7 @@
     <script>
         let mqttClient = null;
         let currentRoomTopic = "";
-        let editingTargetKey = null; // Holds target key context while asset editor is active
+        let editingTargetKey = null;
 
         let gameState = {
             isController: false,
@@ -181,15 +213,18 @@
                             value: (r + 1) * 200,
                             isDD: false,
                             isRead: false,
-                            mediaType: "none", // none, link, file, youtube
-                            mediaUrl: ""
+                            // Separate Asset Blocks
+                            qMediaType: "none",
+                            qMediaUrl: "",
+                            aMediaType: "none",
+                            aMediaUrl: ""
                         };
                     }
                 }
             }
         }
 
-        // --- Connection Sync Setup ---
+        // --- Network Logic ---
         function updateRoomConnection() {
             const roomNum = document.getElementById('roomInput').value || "101";
             const statusIndicator = document.getElementById('connStatus');
@@ -251,71 +286,80 @@
             render();
         }
 
-        // --- Media Input Assistant ---
+        // --- Custom Media Configuration Layout Assistants ---
         function openMediaEditor(col, row, event) {
             event.stopPropagation();
             editingTargetKey = `${col}-${row}`;
             const clue = gameState.clues[editingTargetKey];
 
-            document.getElementById('editQuestion').value = clue.question;
-            document.getElementById('editAnswer').value = clue.answer;
             document.getElementById('editValue').value = clue.value;
-            document.getElementById('editMediaType').value = clue.mediaType || "none";
             
-            // Clean inputs
-            document.getElementById('editMediaUrl').value = clue.mediaType === 'link' ? clue.mediaUrl : "";
-            document.getElementById('editYoutubeUrl').value = clue.mediaType === 'youtube' ? clue.mediaUrl : "";
-            document.getElementById('editMediaFile').value = "";
-            
-            // Temporarily warehouse file data locally inside variable attribute if loaded
-            document.getElementById('editMediaFile').dataset.base64 = clue.mediaType === 'file' ? clue.mediaUrl : "";
+            // Map Question Fields
+            document.getElementById('editQuestion').value = clue.question;
+            document.getElementById('editQMediaType').value = clue.qMediaType || "none";
+            document.getElementById('editQMediaUrl').value = clue.qMediaType === 'link' ? clue.qMediaUrl : "";
+            document.getElementById('editQYoutubeUrl').value = clue.qMediaType === 'youtube' ? clue.qMediaUrl : "";
+            document.getElementById('editQMediaFile').value = "";
+            document.getElementById('editQMediaFile').dataset.base64 = clue.qMediaType === 'file' ? clue.qMediaUrl : "";
 
-            toggleMediaInputFields();
+            // Map Answer Fields
+            document.getElementById('editAnswer').value = clue.answer;
+            document.getElementById('editAMediaType').value = clue.aMediaType || "none";
+            document.getElementById('editAMediaUrl').value = clue.aMediaType === 'link' ? clue.aMediaUrl : "";
+            document.getElementById('editAYoutubeUrl').value = clue.aMediaType === 'youtube' ? clue.aMediaUrl : "";
+            document.getElementById('editAMediaFile').value = "";
+            document.getElementById('editAMediaFile').dataset.base64 = clue.aMediaType === 'file' ? clue.aMediaUrl : "";
+
+            toggleMediaInputFields('Q');
+            toggleMediaInputFields('A');
             document.getElementById('mediaEditModal').classList.remove('hidden');
         }
 
-        function toggleMediaInputFields() {
-            const type = document.getElementById('editMediaType').value;
-            document.getElementById('mediaLinkField').classList.toggle('hidden', type !== 'link');
-            document.getElementById('mediaFileField').classList.toggle('hidden', type !== 'file');
-            document.getElementById('mediaYoutubeField').classList.toggle('hidden', type !== 'youtube');
+        function toggleMediaInputFields(prefix) {
+            const type = document.getElementById(`edit${prefix}MediaType`).value;
+            document.getElementById(`media${prefix}LinkField`).classList.toggle('hidden', type !== 'link');
+            document.getElementById(`media${prefix}FileField`).classList.toggle('hidden', type !== 'file');
+            document.getElementById(`media${prefix}YoutubeField`).classList.toggle('hidden', type !== 'youtube');
         }
 
-        function handleLocalImageUpload(event) {
+        function handleLocalImageUpload(event, prefix) {
             const file = event.target.files[0];
             if (!file) return;
 
-            // Enforce small assets to fit transaction limits over websocket pipes
-            if (file.size > 2 * 1024 * 1024) {
-                alert("File size is too large! Please upload images smaller than 2MB.");
+            if (file.size > 1.5 * 1024 * 1024) {
+                alert("File is too large! Limit base64 images to under 1.5MB to maintain smooth syncing operations.");
                 event.target.value = "";
                 return;
             }
 
             const reader = new FileReader();
             reader.onload = function(e) {
-                // Stash data inside data asset property mapping
-                document.getElementById('editMediaFile').dataset.base64 = e.target.result;
+                document.getElementById(`edit${prefix}MediaFile`).dataset.base64 = e.target.result;
             };
             reader.readAsDataURL(file);
         }
 
         function saveMediaAssetChanges() {
             const clue = gameState.clues[editingTargetKey];
-            clue.question = document.getElementById('editQuestion').value;
-            clue.answer = document.getElementById('editAnswer').value;
             clue.value = parseInt(document.getElementById('editValue').value, 10) || clue.value;
             
-            const mediaType = document.getElementById('editMediaType').value;
-            clue.mediaType = mediaType;
+            // Process Question Inputs
+            clue.question = document.getElementById('editQuestion').value;
+            const qType = document.getElementById('editQMediaType').value;
+            clue.qMediaType = qType;
+            if (qType === 'none') clue.qMediaUrl = "";
+            else if (qType === 'link') clue.qMediaUrl = document.getElementById('editQMediaUrl').value;
+            else if (qType === 'file') clue.qMediaUrl = document.getElementById('editQMediaFile').dataset.base64 || "";
+            else if (qType === 'youtube') clue.qMediaUrl = cleanYoutubeUrl(document.getElementById('editQYoutubeUrl').value);
 
-            if (mediaType === 'none') clue.mediaUrl = "";
-            else if (mediaType === 'link') clue.mediaUrl = document.getElementById('editMediaUrl').value;
-            else if (mediaType === 'file') clue.mediaUrl = document.getElementById('editMediaFile').dataset.base64 || "";
-            else if (mediaType === 'youtube') {
-                let rawUrl = document.getElementById('editYoutubeUrl').value;
-                clue.mediaUrl = cleanYoutubeUrl(rawUrl);
-            }
+            // Process Answer Inputs
+            clue.answer = document.getElementById('editAnswer').value;
+            const aType = document.getElementById('editAMediaType').value;
+            clue.aMediaType = aType;
+            if (aType === 'none') clue.aMediaUrl = "";
+            else if (aType === 'link') clue.aMediaUrl = document.getElementById('editAMediaUrl').value;
+            else if (aType === 'file') clue.aMediaUrl = document.getElementById('editAMediaFile').dataset.base64 || "";
+            else if (aType === 'youtube') clue.aMediaUrl = cleanYoutubeUrl(document.getElementById('editAYoutubeUrl').value);
 
             closeMediaEditor();
             sendAction('syncState', {});
@@ -328,16 +372,15 @@
         }
 
         function cleanYoutubeUrl(url) {
-            // Helper to parse strings to direct clean embed iframe links
             let regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
             let match = url.match(regExp);
             if (match && match[2].length === 11) {
                 return `https://www.youtube.com/embed/${match[2]}`;
             }
-            return url; // Fallback
+            return url;
         }
 
-        // --- Save / Load Logic ---
+        // --- File System Operations ---
         function saveBoardToFile() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
                 rows: gameState.rows,
@@ -378,7 +421,7 @@
             reader.readAsText(file);
         }
 
-        // --- Core Application Logic ---
+        // --- Layout Adjustment Frameworks ---
         function toggleMode() {
             const checkbox = document.getElementById('modeToggle');
             gameState.isController = checkbox.checked;
@@ -447,7 +490,7 @@
             }
         }
 
-        // --- Rendering Engine ---
+        // --- Rendering Core ---
         function render() {
             document.getElementById('playerCountDisplay').innerText = gameState.players.length;
             renderBoard();
@@ -490,8 +533,8 @@
                         if (gameState.isController) {
                             card.setAttribute('onclick', `sendAction('openClue', {col: ${c}, row: ${r}})`);
                             
-                            // Check mark helper symbol indicates present media attachments on card matrix cell
-                            const mediaIndicator = (clue.mediaType && clue.mediaType !== 'none') ? "🖼️ " : "";
+                            let mediaIndicator = "";
+                            if (clue.qMediaType !== 'none' || clue.aMediaType !== 'none') mediaIndicator = "🎬 ";
                             
                             card.innerHTML = `
                                 <div class="flex justify-between w-full">
@@ -538,7 +581,7 @@
             
             if (!gameState.activeClue) {
                 modal.classList.add('hidden');
-                mediaContainer.innerHTML = ''; // Wipe embed content if closed
+                mediaContainer.innerHTML = '';
                 return;
             }
 
@@ -553,24 +596,25 @@
             if (clue.isDD) ddBanner.classList.remove('hidden');
             else ddBanner.classList.add('hidden');
 
-            // --- RENDER CLUE QUESTION MEDIA ATTACHMENTS ---
+            // Determine active asset target based on answer visibility toggle state
+            let type = gameState.showingAnswer ? clue.aMediaType : clue.qMediaType;
+            let url = gameState.showingAnswer ? clue.aMediaUrl : clue.qMediaUrl;
+
             mediaContainer.innerHTML = '';
             
-            // Only render media attachments while displaying the question, clear it on answer flip
-            if (!gameState.showingAnswer && clue.mediaType && clue.mediaType !== 'none' && clue.mediaUrl) {
+            if (type && type !== 'none' && url) {
                 mediaContainer.classList.remove('hidden');
-                
-                if (clue.mediaType === 'link' || clue.mediaType === 'file') {
+                if (type === 'link' || type === 'file') {
                     const img = document.createElement('img');
-                    img.src = clue.mediaUrl;
-                    img.className = "mx-auto max-h-64 md:max-h-80 object-contain rounded-lg border border-slate-700 shadow-md";
+                    img.src = url;
+                    img.className = "mx-auto max-h-60 md:max-h-72 object-contain rounded-lg border border-slate-700 shadow-md";
                     mediaContainer.appendChild(img);
-                } else if (clue.mediaType === 'youtube') {
+                } else if (type === 'youtube') {
                     const wrap = document.createElement('div');
                     wrap.className = "aspect-video w-full max-w-xl mx-auto";
                     wrap.innerHTML = `
                         <iframe class="w-full h-full rounded-lg border border-slate-700 shadow-md" 
-                                src="${clue.mediaUrl}" 
+                                src="${url}" 
                                 frameborder="0" 
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                                 allowfullscreen>
@@ -590,7 +634,7 @@
                 textElement.className = "text-2xl md:text-4xl font-serif font-bold text-white text-center leading-relaxed mb-6";
             }
 
-            // Dynamic Modal Score Setup
+            // Dynamic Scoring Layout Panel Generation
             const scorePanel = document.getElementById('modalScorePanel');
             scorePanel.innerHTML = '';
 
