@@ -192,7 +192,7 @@
 
         let gameState = {
             isController: false,
-            isEditingEnabled: false, // New localized edit state helper
+            isEditingEnabled: false,
             rows: 5,
             cols: 5,
             categories: ["History", "Science", "Pop Culture", "Geography", "Sports", "Tech", "Art"],
@@ -245,7 +245,11 @@
             mqttClient.on('connect', () => {
                 mqttClient.subscribe(currentRoomTopic);
                 statusIndicator.className = "inline-block w-2.5 h-2.5 rounded-full bg-emerald-500";
-                if(gameState.isController) sendAction('syncState', {});
+                
+                // CRITICAL FIX: Controllers ask for data instead of overwriting blindly
+                if(gameState.isController) {
+                    mqttClient.publish(currentRoomTopic, JSON.stringify({ type: 'requestState' }));
+                }
             });
 
             mqttClient.on('message', (topic, message) => {
@@ -261,8 +265,7 @@
         }
 
         function sendAction(type, data) {
-            if (!gameState.isController || !mqttClient) return; 
-            // Avoid syncing UI view types like isController or isEditingEnabled over channels
+            if (!mqttClient) return; 
             const dataToSync = {
                 rows: gameState.rows,
                 cols: gameState.cols,
@@ -279,15 +282,21 @@
         function handleRemoteAction(payload) {
             const { type, data, boardData } = payload;
             
-            // Sync core board metrics globally across all connected clients 
-            if (boardData) {
+            // If another device asks for the state, and this device is the main TV Screen, broadcast the current setup
+            if (type === 'requestState' && !gameState.isController) {
+                sendAction('respondState', {});
+                return;
+            }
+
+            // Sync board data changes securely
+            if (boardData && (type !== 'respondState' || gameState.isController)) {
                 gameState.rows = boardData.rows;
                 gameState.cols = boardData.cols;
                 gameState.players = boardData.players;
                 gameState.clues = boardData.clues;
                 gameState.categories = boardData.categories;
                 
-                // ONLY mirror popups and revealed cards if this device is set to Screen (TV Display) Mode
+                // Only follow popup transitions if this device isn't controlling them directly
                 if (!gameState.isController) {
                     gameState.activeClue = boardData.activeClue;
                     gameState.showingAnswer = boardData.showingAnswer;
@@ -300,9 +309,7 @@
                     gameState.showingAnswer = false;
                 } else if (type === 'revealAnswer') {
                     gameState.showingAnswer = true;
-                } else if (type === 'closeClue') {
-                    gameState.activeClue = null;
-                } else if (type === 'reset') {
+                } else if (type === 'closeClue' || type === 'reset') {
                     gameState.activeClue = null;
                 }
             }
@@ -312,7 +319,7 @@
 
         // --- Action Interceptors ---
         function triggerOpenClue(col, row) {
-            if (gameState.isEditingEnabled) return; // Prevent accidental opening during edit setups
+            if (gameState.isEditingEnabled) return;
             gameState.activeClue = {col, row};
             gameState.showingAnswer = false;
             render();
@@ -355,7 +362,9 @@
                 label.classList.add("text-blue-400");
                 hostControls.classList.remove("hidden");
                 modalHostButtons.classList.remove("hidden");
-                sendAction('syncState', {});
+                
+                // Request state safely from the existing screen instead of wiping it out
+                if (mqttClient) mqttClient.publish(currentRoomTopic, JSON.stringify({ type: 'requestState' }));
             } else {
                 label.innerText = "Screen Mode (TV)";
                 label.classList.remove("text-blue-400");
@@ -502,6 +511,16 @@
             sendAction('syncState', {});
         }
 
+        document.addEventListener("keydown", (e) => {
+            if (gameState.activeClue && gameState.isController) {
+                if (e.key === "Escape") triggerClose();
+                if (e.key === " " || e.key === "Enter") {
+                    e.preventDefault();
+                    if (!gameState.showingAnswer) triggerReveal();
+                }
+            }
+        });
+
         function closeMediaEditor() {
             document.getElementById('mediaEditModal').classList.add('hidden');
             editingTargetKey = null;
@@ -592,7 +611,6 @@
                         card.className = "bg-slate-800/40 border border-slate-800 text-slate-600 flex flex-col justify-center items-center h-24 rounded-lg text-xl font-bold select-none";
                         card.innerText = "---";
                     } else {
-                        // Highlight style if edit mode is active vs presentation mode
                         if (gameState.isEditingEnabled) {
                             card.className = `bg-slate-800 border-2 border-dashed border-amber-500 text-slate-200 flex flex-col justify-between items-center p-2 h-24 rounded-lg text-center font-bold text-sm cursor-pointer select-none`;
                             let mediaIndicator = (clue.qMediaType !== 'none' || clue.aMediaType !== 'none') ? "🎬 " : "";
