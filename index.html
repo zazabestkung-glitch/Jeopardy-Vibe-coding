@@ -35,6 +35,14 @@
         </div>
 
         <div id="hostControls" class="hidden flex flex-wrap gap-4 items-center">
+            <label class="inline-flex items-center cursor-pointer bg-slate-700 px-3 py-1 rounded-lg border border-slate-600">
+                <input type="checkbox" id="editModeToggle" class="sr-only peer" onchange="toggleEditMode()">
+                <div class="w-9 h-5 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500 relative"></div>
+                <span class="ms-2 text-xs font-bold text-amber-400">✏️ Edit Mode</span>
+            </label>
+
+            <div class="h-6 w-px bg-slate-600"></div>
+
             <div class="flex gap-2">
                 <button onclick="adjustGrid('col', 1)" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded text-xs font-bold">+ Col</button>
                 <button onclick="adjustGrid('col', -1)" class="bg-rose-600 hover:bg-rose-500 px-3 py-1 rounded text-xs font-bold">- Col</button>
@@ -103,7 +111,6 @@
                     <label class="block text-slate-400 font-bold mb-1">Point Value:</label>
                     <input type="number" id="editValue" class="bg-slate-900 border border-slate-600 p-2 rounded focus:outline-none focus:border-blue-500 w-32">
                 </div>
-
                 <div class="h-px bg-slate-700 my-2"></div>
 
                 <div class="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
@@ -185,6 +192,7 @@
 
         let gameState = {
             isController: false,
+            isEditingEnabled: false, // New localized edit state helper
             rows: 5,
             cols: 5,
             categories: ["History", "Science", "Pop Culture", "Geography", "Sports", "Tech", "Art"],
@@ -254,42 +262,57 @@
 
         function sendAction(type, data) {
             if (!gameState.isController || !mqttClient) return; 
-            const payload = JSON.stringify({ type, data, senderState: gameState });
+            // Avoid syncing UI view types like isController or isEditingEnabled over channels
+            const dataToSync = {
+                rows: gameState.rows,
+                cols: gameState.cols,
+                categories: gameState.categories,
+                players: gameState.players,
+                clues: gameState.clues,
+                activeClue: gameState.activeClue,
+                showingAnswer: gameState.showingAnswer
+            };
+            const payload = JSON.stringify({ type, data, boardData: dataToSync });
             mqttClient.publish(currentRoomTopic, payload);
         }
 
         function handleRemoteAction(payload) {
-            const { type, data, senderState } = payload;
+            const { type, data, boardData } = payload;
             
-            if (senderState) {
-                gameState.rows = senderState.rows;
-                gameState.cols = senderState.cols;
-                gameState.players = senderState.players;
-                gameState.clues = senderState.clues;
-                if(senderState.categories) gameState.categories = senderState.categories;
+            // Sync core board metrics globally across all connected clients 
+            if (boardData) {
+                gameState.rows = boardData.rows;
+                gameState.cols = boardData.cols;
+                gameState.players = boardData.players;
+                gameState.clues = boardData.clues;
+                gameState.categories = boardData.categories;
+                
+                // ONLY mirror popups and revealed cards if this device is set to Screen (TV Display) Mode
+                if (!gameState.isController) {
+                    gameState.activeClue = boardData.activeClue;
+                    gameState.showingAnswer = boardData.showingAnswer;
+                }
             }
 
-            if (type === 'openClue') {
-                gameState.activeClue = data;
-                gameState.showingAnswer = false;
-            } else if (type === 'revealAnswer') {
-                gameState.showingAnswer = true;
-            } else if (type === 'closeClue') {
-                if (gameState.activeClue) {
-                    const targetKey = `${gameState.activeClue.col}-${gameState.activeClue.row}`;
-                    if (gameState.clues[targetKey]) gameState.clues[targetKey].isRead = true;
+            if (!gameState.isController) {
+                if (type === 'openClue') {
+                    gameState.activeClue = data;
+                    gameState.showingAnswer = false;
+                } else if (type === 'revealAnswer') {
+                    gameState.showingAnswer = true;
+                } else if (type === 'closeClue') {
+                    gameState.activeClue = null;
+                } else if (type === 'reset') {
+                    gameState.activeClue = null;
                 }
-                gameState.activeClue = null;
-            } else if (type === 'reset') {
-                gameState.activeClue = null;
-                for (let key in gameState.clues) gameState.clues[key].isRead = false;
             }
 
             render();
         }
 
-        // --- Layout Action Interceptors (Local First for Responsiveness) ---
+        // --- Action Interceptors ---
         function triggerOpenClue(col, row) {
+            if (gameState.isEditingEnabled) return; // Prevent accidental opening during edit setups
             gameState.activeClue = {col, row};
             gameState.showingAnswer = false;
             render();
@@ -318,138 +341,7 @@
             sendAction('reset', {});
         }
 
-        // --- Custom Media Configuration Layout Assistants ---
-        function openMediaEditor(col, row, event) {
-            event.stopPropagation();
-            editingTargetKey = `${col}-${row}`;
-            const clue = gameState.clues[editingTargetKey];
-
-            document.getElementById('editValue').value = clue.value;
-            
-            document.getElementById('editQuestion').value = clue.question;
-            document.getElementById('editQMediaType').value = clue.qMediaType || "none";
-            document.getElementById('editQMediaUrl').value = clue.qMediaType === 'link' ? clue.qMediaUrl : "";
-            document.getElementById('editQYoutubeUrl').value = clue.qMediaType === 'youtube' ? clue.qMediaUrl : "";
-            document.getElementById('editQMediaFile').value = "";
-            document.getElementById('editQMediaFile').dataset.base64 = clue.qMediaType === 'file' ? clue.qMediaUrl : "";
-
-            document.getElementById('editAnswer').value = clue.answer;
-            document.getElementById('editAMediaType').value = clue.aMediaType || "none";
-            document.getElementById('editAMediaUrl').value = clue.aMediaType === 'link' ? clue.aMediaUrl : "";
-            document.getElementById('editAYoutubeUrl').value = clue.aMediaType === 'youtube' ? clue.aMediaUrl : "";
-            document.getElementById('editAMediaFile').value = "";
-            document.getElementById('editAMediaFile').dataset.base64 = clue.aMediaType === 'file' ? clue.aMediaUrl : "";
-
-            toggleMediaInputFields('Q');
-            toggleMediaInputFields('A');
-            document.getElementById('mediaEditModal').classList.remove('hidden');
-        }
-
-        function toggleMediaInputFields(prefix) {
-            const type = document.getElementById(`edit${prefix}MediaType`).value;
-            document.getElementById(`media${prefix}LinkField`).classList.toggle('hidden', type !== 'link');
-            document.getElementById(`media${prefix}FileField`).classList.toggle('hidden', type !== 'file');
-            document.getElementById(`media${prefix}YoutubeField`).classList.toggle('hidden', type !== 'youtube');
-        }
-
-        function handleLocalImageUpload(event, prefix) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            if (file.size > 1.5 * 1024 * 1024) {
-                alert("File is too large! Limit base64 images to under 1.5MB to maintain smooth syncing operations.");
-                event.target.value = "";
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                document.getElementById(`edit${prefix}MediaFile`).dataset.base64 = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-
-        function saveMediaAssetChanges() {
-            const clue = gameState.clues[editingTargetKey];
-            clue.value = parseInt(document.getElementById('editValue').value, 10) || clue.value;
-            
-            clue.question = document.getElementById('editQuestion').value;
-            const qType = document.getElementById('editQMediaType').value;
-            clue.qMediaType = qType;
-            if (qType === 'none') clue.qMediaUrl = "";
-            else if (qType === 'link') clue.qMediaUrl = document.getElementById('editQMediaUrl').value;
-            else if (qType === 'file') clue.qMediaUrl = document.getElementById('editQMediaFile').dataset.base64 || "";
-            else if (qType === 'youtube') clue.qMediaUrl = cleanYoutubeUrl(document.getElementById('editQYoutubeUrl').value);
-
-            clue.answer = document.getElementById('editAnswer').value;
-            const aType = document.getElementById('editAMediaType').value;
-            clue.aMediaType = aType;
-            if (aType === 'none') clue.aMediaUrl = "";
-            else if (aType === 'link') clue.aMediaUrl = document.getElementById('editAMediaUrl').value;
-            else if (aType === 'file') clue.aMediaUrl = document.getElementById('editAMediaFile').dataset.base64 || "";
-            else if (aType === 'youtube') clue.aMediaUrl = cleanYoutubeUrl(document.getElementById('editAYoutubeUrl').value);
-
-            closeMediaEditor();
-            render();
-            sendAction('syncState', {});
-        }
-
-        function closeMediaEditor() {
-            document.getElementById('mediaEditModal').classList.add('hidden');
-            editingTargetKey = null;
-        }
-
-        function cleanYoutubeUrl(url) {
-            let regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-            let match = url.match(regExp);
-            if (match && match[2].length === 11) {
-                return `https://www.youtube.com/embed/${match[2]}`;
-            }
-            return url;
-        }
-
-        // --- File System Operations ---
-        function saveBoardToFile() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
-                rows: gameState.rows,
-                cols: gameState.cols,
-                categories: gameState.categories,
-                players: gameState.players,
-                clues: gameState.clues
-            }, null, 2));
-            
-            const downloadAnchor = document.createElement('a');
-            downloadAnchor.setAttribute("href", dataStr);
-            downloadAnchor.setAttribute("download", `jeopardy-room-${document.getElementById('roomInput').value}.json`);
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            downloadAnchor.remove();
-        }
-
-        function loadBoardFromFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const importedState = JSON.parse(e.target.result);
-                    if(importedState.rows) gameState.rows = importedState.rows;
-                    if(importedState.cols) gameState.cols = importedState.cols;
-                    if(importedState.categories) gameState.categories = importedState.categories;
-                    if(importedState.players) gameState.players = importedState.players;
-                    if(importedState.clues) gameState.clues = importedState.clues;
-
-                    render();
-                    sendAction('syncState', {});
-                } catch (error) {
-                    alert("Invalid file structure.");
-                }
-            };
-            reader.readAsText(file);
-        }
-
-        // --- Layout Adjustment Frameworks ---
+        // --- Layout Framework Adjustments ---
         function toggleMode() {
             const checkbox = document.getElementById('modeToggle');
             gameState.isController = checkbox.checked;
@@ -469,12 +361,19 @@
                 label.classList.remove("text-blue-400");
                 hostControls.classList.add("hidden");
                 modalHostButtons.classList.add("hidden");
+                gameState.isEditingEnabled = false;
+                document.getElementById('editModeToggle').checked = false;
             }
             render();
         }
 
+        function toggleEditMode() {
+            gameState.isEditingEnabled = document.getElementById('editModeToggle').checked;
+            render();
+        }
+
         function editCategoryHeader(colIndex) {
-            if (!gameState.isController) return;
+            if (!gameState.isEditingEnabled) return;
             const currentName = gameState.categories[colIndex] || `Category ${colIndex + 1}`;
             const newName = prompt(`Enter title for Column ${colIndex + 1}:`, currentName);
             if (newName) {
@@ -530,6 +429,131 @@
             }
         }
 
+        // --- Custom Media Configuration Layout Assistants ---
+        function openMediaEditor(col, row, event) {
+            event.stopPropagation();
+            editingTargetKey = `${col}-${row}`;
+            const clue = gameState.clues[editingTargetKey];
+
+            document.getElementById('editValue').value = clue.value;
+            document.getElementById('editQuestion').value = clue.question;
+            document.getElementById('editQMediaType').value = clue.qMediaType || "none";
+            document.getElementById('editQMediaUrl').value = clue.qMediaType === 'link' ? clue.qMediaUrl : "";
+            document.getElementById('editQYoutubeUrl').value = clue.qMediaType === 'youtube' ? clue.qMediaUrl : "";
+            document.getElementById('editQMediaFile').value = "";
+            document.getElementById('editQMediaFile').dataset.base64 = clue.qMediaType === 'file' ? clue.qMediaUrl : "";
+
+            document.getElementById('editAnswer').value = clue.answer;
+            document.getElementById('editAMediaType').value = clue.aMediaType || "none";
+            document.getElementById('editAMediaUrl').value = clue.aMediaType === 'link' ? clue.aMediaUrl : "";
+            document.getElementById('editAYoutubeUrl').value = clue.aMediaType === 'youtube' ? clue.aMediaUrl : "";
+            document.getElementById('editAMediaFile').value = "";
+            document.getElementById('editAMediaFile').dataset.base64 = clue.aMediaType === 'file' ? clue.aMediaUrl : "";
+
+            toggleMediaInputFields('Q');
+            toggleMediaInputFields('A');
+            document.getElementById('mediaEditModal').classList.remove('hidden');
+        }
+
+        function toggleMediaInputFields(prefix) {
+            const type = document.getElementById(`edit${prefix}MediaType`).value;
+            document.getElementById(`media${prefix}LinkField`).classList.toggle('hidden', type !== 'link');
+            document.getElementById(`media${prefix}FileField`).classList.toggle('hidden', type !== 'file');
+            document.getElementById(`media${prefix}YoutubeField`).classList.toggle('hidden', type !== 'youtube');
+        }
+
+        function handleLocalImageUpload(event, prefix) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (file.size > 1.5 * 1024 * 1024) {
+                alert("File size limit is 1.5MB.");
+                event.target.value = "";
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById(`edit${prefix}MediaFile`).dataset.base64 = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function saveMediaAssetChanges() {
+            const clue = gameState.clues[editingTargetKey];
+            clue.value = parseInt(document.getElementById('editValue').value, 10) || clue.value;
+            clue.question = document.getElementById('editQuestion').value;
+            
+            const qType = document.getElementById('editQMediaType').value;
+            clue.qMediaType = qType;
+            if (qType === 'none') clue.qMediaUrl = "";
+            else if (qType === 'link') clue.qMediaUrl = document.getElementById('editQMediaUrl').value;
+            else if (qType === 'file') clue.qMediaUrl = document.getElementById('editQMediaFile').dataset.base64 || "";
+            else if (qType === 'youtube') clue.qMediaUrl = cleanYoutubeUrl(document.getElementById('editQYoutubeUrl').value);
+
+            clue.answer = document.getElementById('editAnswer').value;
+            const aType = document.getElementById('editAMediaType').value;
+            clue.aMediaType = aType;
+            if (aType === 'none') clue.aMediaUrl = "";
+            else if (aType === 'link') clue.aMediaUrl = document.getElementById('editAMediaUrl').value;
+            else if (aType === 'file') clue.aMediaUrl = document.getElementById('editAMediaFile').dataset.base64 || "";
+            else if (aType === 'youtube') clue.aMediaUrl = cleanYoutubeUrl(document.getElementById('editAYoutubeUrl').value);
+
+            closeMediaEditor();
+            render();
+            sendAction('syncState', {});
+        }
+
+        function closeMediaEditor() {
+            document.getElementById('mediaEditModal').classList.add('hidden');
+            editingTargetKey = null;
+        }
+
+        function cleanYoutubeUrl(url) {
+            let regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            let match = url.match(regExp);
+            if (match && match[2].length === 11) {
+                return `https://www.youtube.com/embed/${match[2]}`;
+            }
+            return url;
+        }
+
+        // --- File System Operations ---
+        function saveBoardToFile() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+                rows: gameState.rows,
+                cols: gameState.cols,
+                categories: gameState.categories,
+                players: gameState.players,
+                clues: gameState.clues
+            }, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `jeopardy-room-${document.getElementById('roomInput').value}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function loadBoardFromFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedState = JSON.parse(e.target.result);
+                    if(importedState.rows) gameState.rows = importedState.rows;
+                    if(importedState.cols) gameState.cols = importedState.cols;
+                    if(importedState.categories) gameState.categories = importedState.categories;
+                    if(importedState.players) gameState.players = importedState.players;
+                    if(importedState.clues) gameState.clues = importedState.clues;
+                    render();
+                    sendAction('syncState', {});
+                } catch (error) {
+                    alert("Invalid file structure.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
         // --- Rendering Core ---
         function render() {
             document.getElementById('playerCountDisplay').innerText = gameState.players.length;
@@ -547,8 +571,8 @@
                 const header = document.createElement('div');
                 const catName = gameState.categories[c] || `Category ${c+1}`;
                 
-                if (gameState.isController) {
-                    header.className = "bg-blue-900 border-2 border-dashed border-blue-500 hover:bg-blue-800 p-3 text-center font-bold tracking-wider rounded-t-lg truncate text-sm md:text-base cursor-pointer text-yellow-300";
+                if (gameState.isEditingEnabled) {
+                    header.className = "bg-blue-900 border-2 border-dashed border-amber-500 hover:bg-blue-800 p-3 text-center font-bold tracking-wider rounded-t-lg truncate text-sm md:text-base cursor-pointer text-amber-300";
                     header.innerHTML = `📝 ${catName}`;
                     header.setAttribute('onclick', `editCategoryHeader(${c})`);
                 } else {
@@ -568,23 +592,23 @@
                         card.className = "bg-slate-800/40 border border-slate-800 text-slate-600 flex flex-col justify-center items-center h-24 rounded-lg text-xl font-bold select-none";
                         card.innerText = "---";
                     } else {
-                        card.className = `clue-card bg-blue-800 border-2 border-blue-600 text-yellow-400 flex flex-col justify-between items-center p-2 h-24 rounded-lg shadow-lg text-center font-black text-xl md:text-2xl cursor-pointer select-none`;
-                        
-                        if (gameState.isController) {
-                            card.setAttribute('onclick', `triggerOpenClue(${c}, ${r})`);
-                            
-                            let mediaIndicator = "";
-                            if (clue.qMediaType !== 'none' || clue.aMediaType !== 'none') mediaIndicator = "🎬 ";
-                            
+                        // Highlight style if edit mode is active vs presentation mode
+                        if (gameState.isEditingEnabled) {
+                            card.className = `bg-slate-800 border-2 border-dashed border-amber-500 text-slate-200 flex flex-col justify-between items-center p-2 h-24 rounded-lg text-center font-bold text-sm cursor-pointer select-none`;
+                            let mediaIndicator = (clue.qMediaType !== 'none' || clue.aMediaType !== 'none') ? "🎬 " : "";
                             card.innerHTML = `
                                 <div class="flex justify-between w-full">
                                     <button onclick="toggleDD(${c}, ${r}, event)" class="text-[10px] px-1 rounded ${clue.isDD ? 'bg-amber-500 text-slate-900 font-bold' : 'bg-slate-700 text-slate-300'}">DD</button>
-                                    <button onclick="openMediaEditor(${c}, ${r}, event)" class="text-[10px] bg-slate-700 hover:bg-slate-600 px-1 rounded text-white">✏️</button>
+                                    <button onclick="openMediaEditor(${c}, ${r}, event)" class="text-[10px] bg-amber-600 hover:bg-amber-500 px-1 rounded text-white font-bold">Edit ✏️</button>
                                 </div>
-                                <span class="mb-2 text-sm md:text-xl">${mediaIndicator}$${clue.value}</span>
+                                <span class="mb-2">${mediaIndicator}$${clue.value}</span>
                             `;
                         } else {
+                            card.className = `clue-card bg-blue-800 border-2 border-blue-600 text-yellow-400 flex flex-col justify-center items-center p-2 h-24 rounded-lg shadow-lg text-center font-black text-xl md:text-2xl cursor-pointer select-none`;
                             card.innerHTML = `<div class="m-auto">$${clue.value}</div>`;
+                            if (gameState.isController) {
+                                card.setAttribute('onclick', `triggerOpenClue(${c}, ${r})`);
+                            }
                         }
                     }
                     gridContainer.appendChild(card);
