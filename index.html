@@ -59,16 +59,13 @@
                 </label>
             </div>
             
-            <button onclick="sendAction('reset', {})" class="bg-amber-600 hover:bg-amber-500 px-3 py-1 rounded text-xs font-bold">Reset Played</button>
+            <button onclick="triggerReset()" class="bg-amber-600 hover:bg-amber-500 px-3 py-1 rounded text-xs font-bold">Reset Played</button>
         </div>
     </div>
 
     <div class="max-w-7xl mx-auto">
-        <div id="jeopardyGrid" class="grid gap-4 mb-8">
-            </div>
-
-        <div id="playersContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 justify-center">
-            </div>
+        <div id="jeopardyGrid" class="grid gap-4 mb-8"></div>
+        <div id="playersContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 justify-center"></div>
     </div>
 
     <div id="clueModal" class="fixed inset-0 bg-blue-950/95 flex flex-col justify-center items-center p-6 hidden z-50 overflow-y-auto">
@@ -80,15 +77,14 @@
             <h2 id="modalCategory" class="text-amber-400 text-xl font-bold uppercase tracking-widest mb-1">Category</h2>
             <div id="modalValue" class="text-lg text-slate-400 mb-4">$200</div>
             
-            <div id="modalMediaContainer" class="w-full max-w-xl mb-6 hidden">
-                </div>
+            <div id="modalMediaContainer" class="w-full max-w-xl mb-6 hidden"></div>
 
             <p id="modalText" class="text-2xl md:text-4xl font-serif font-bold leading-relaxed mb-8">Clue text...</p>
             
             <div id="modalHostButtons" class="hidden flex flex-col gap-4 items-center w-full">
                 <div class="flex gap-4 justify-center">
-                    <button onclick="sendAction('revealAnswer', {})" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-lg font-bold">Reveal Answer</button>
-                    <button onclick="sendAction('closeClue', {})" class="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-lg font-bold">Close & Back</button>
+                    <button onclick="triggerReveal()" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-lg font-bold">Reveal Answer</button>
+                    <button onclick="triggerClose()" class="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-lg font-bold">Close & Back</button>
                 </div>
                 
                 <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-700 w-full max-w-2xl">
@@ -213,7 +209,6 @@
                             value: (r + 1) * 200,
                             isDD: false,
                             isRead: false,
-                            // Separate Asset Blocks
                             qMediaType: "none",
                             qMediaUrl: "",
                             aMediaType: "none",
@@ -247,8 +242,12 @@
 
             mqttClient.on('message', (topic, message) => {
                 if(topic === currentRoomTopic) {
-                    const actionPayload = JSON.parse(message.toString());
-                    handleRemoteAction(actionPayload);
+                    try {
+                        const actionPayload = JSON.parse(message.toString());
+                        handleRemoteAction(actionPayload);
+                    } catch(e) {
+                        console.error("Error handling incoming payload", e);
+                    }
                 }
             });
         }
@@ -276,7 +275,10 @@
             } else if (type === 'revealAnswer') {
                 gameState.showingAnswer = true;
             } else if (type === 'closeClue') {
-                gameState.clues[`${gameState.activeClue.col}-${gameState.activeClue.row}`].isRead = true;
+                if (gameState.activeClue) {
+                    const targetKey = `${gameState.activeClue.col}-${gameState.activeClue.row}`;
+                    if (gameState.clues[targetKey]) gameState.clues[targetKey].isRead = true;
+                }
                 gameState.activeClue = null;
             } else if (type === 'reset') {
                 gameState.activeClue = null;
@@ -284,6 +286,36 @@
             }
 
             render();
+        }
+
+        // --- Layout Action Interceptors (Local First for Responsiveness) ---
+        function triggerOpenClue(col, row) {
+            gameState.activeClue = {col, row};
+            gameState.showingAnswer = false;
+            render();
+            sendAction('openClue', {col, row});
+        }
+
+        function triggerReveal() {
+            gameState.showingAnswer = true;
+            render();
+            sendAction('revealAnswer', {});
+        }
+
+        function triggerClose() {
+            if (gameState.activeClue) {
+                gameState.clues[`${gameState.activeClue.col}-${gameState.activeClue.row}`].isRead = true;
+            }
+            gameState.activeClue = null;
+            render();
+            sendAction('closeClue', {});
+        }
+
+        function triggerReset() {
+            gameState.activeClue = null;
+            for (let key in gameState.clues) gameState.clues[key].isRead = false;
+            render();
+            sendAction('reset', {});
         }
 
         // --- Custom Media Configuration Layout Assistants ---
@@ -294,7 +326,6 @@
 
             document.getElementById('editValue').value = clue.value;
             
-            // Map Question Fields
             document.getElementById('editQuestion').value = clue.question;
             document.getElementById('editQMediaType').value = clue.qMediaType || "none";
             document.getElementById('editQMediaUrl').value = clue.qMediaType === 'link' ? clue.qMediaUrl : "";
@@ -302,7 +333,6 @@
             document.getElementById('editQMediaFile').value = "";
             document.getElementById('editQMediaFile').dataset.base64 = clue.qMediaType === 'file' ? clue.qMediaUrl : "";
 
-            // Map Answer Fields
             document.getElementById('editAnswer').value = clue.answer;
             document.getElementById('editAMediaType').value = clue.aMediaType || "none";
             document.getElementById('editAMediaUrl').value = clue.aMediaType === 'link' ? clue.aMediaUrl : "";
@@ -343,7 +373,6 @@
             const clue = gameState.clues[editingTargetKey];
             clue.value = parseInt(document.getElementById('editValue').value, 10) || clue.value;
             
-            // Process Question Inputs
             clue.question = document.getElementById('editQuestion').value;
             const qType = document.getElementById('editQMediaType').value;
             clue.qMediaType = qType;
@@ -352,7 +381,6 @@
             else if (qType === 'file') clue.qMediaUrl = document.getElementById('editQMediaFile').dataset.base64 || "";
             else if (qType === 'youtube') clue.qMediaUrl = cleanYoutubeUrl(document.getElementById('editQYoutubeUrl').value);
 
-            // Process Answer Inputs
             clue.answer = document.getElementById('editAnswer').value;
             const aType = document.getElementById('editAMediaType').value;
             clue.aMediaType = aType;
@@ -362,8 +390,8 @@
             else if (aType === 'youtube') clue.aMediaUrl = cleanYoutubeUrl(document.getElementById('editAYoutubeUrl').value);
 
             closeMediaEditor();
-            sendAction('syncState', {});
             render();
+            sendAction('syncState', {});
         }
 
         function closeMediaEditor() {
@@ -412,8 +440,8 @@
                     if(importedState.players) gameState.players = importedState.players;
                     if(importedState.clues) gameState.clues = importedState.clues;
 
-                    sendAction('syncState', {});
                     render();
+                    sendAction('syncState', {});
                 } catch (error) {
                     alert("Invalid file structure.");
                 }
@@ -451,14 +479,15 @@
             const newName = prompt(`Enter title for Column ${colIndex + 1}:`, currentName);
             if (newName) {
                 gameState.categories[colIndex] = newName;
-                sendAction('syncState', {});
                 render();
+                sendAction('syncState', {});
             }
         }
 
         function adjustGrid(type, delta) {
             if(type === 'col') gameState.cols = Math.max(1, Math.min(7, gameState.cols + delta));
             if(type === 'row') gameState.rows = Math.max(1, Math.min(6, gameState.rows + delta));
+            render();
             sendAction('syncState', {});
         }
 
@@ -468,11 +497,20 @@
             } else if (delta < 0 && gameState.players.length > 1) {
                 gameState.players.pop();
             }
+            render();
             sendAction('syncState', {});
         }
 
         function updateScore(pIndex, amount) {
             gameState.players[pIndex].score += amount;
+            render();
+            sendAction('syncState', {});
+        }
+
+        function directScoreEdit(pIndex, value) {
+            const parsed = parseInt(value, 10);
+            gameState.players[pIndex].score = isNaN(parsed) ? 0 : parsed;
+            render();
             sendAction('syncState', {});
         }
 
@@ -480,12 +518,14 @@
             event.stopPropagation();
             const key = `${col}-${row}`;
             gameState.clues[key].isDD = !gameState.clues[key].isDD;
+            render();
             sendAction('syncState', {});
         }
 
         function renamePlayer(index, newName) {
             if(newName) {
                 gameState.players[index].name = newName;
+                render();
                 sendAction('syncState', {});
             }
         }
@@ -531,7 +571,7 @@
                         card.className = `clue-card bg-blue-800 border-2 border-blue-600 text-yellow-400 flex flex-col justify-between items-center p-2 h-24 rounded-lg shadow-lg text-center font-black text-xl md:text-2xl cursor-pointer select-none`;
                         
                         if (gameState.isController) {
-                            card.setAttribute('onclick', `sendAction('openClue', {col: ${c}, row: ${r}})`);
+                            card.setAttribute('onclick', `triggerOpenClue(${c}, ${r})`);
                             
                             let mediaIndicator = "";
                             if (clue.qMediaType !== 'none' || clue.aMediaType !== 'none') mediaIndicator = "🎬 ";
@@ -563,7 +603,7 @@
                 if (gameState.isController) {
                     pBox.innerHTML = `
                         <input type="text" value="${player.name}" onchange="renamePlayer(${index}, this.value)" class="bg-transparent font-bold text-sm text-slate-300 text-center w-full focus:bg-slate-700 rounded mb-1">
-                        <div class="text-2xl font-black text-emerald-400">${player.score}</div>
+                        <input type="number" value="${player.score}" onchange="directScoreEdit(${index}, this.value)" class="bg-slate-900 text-center font-black text-xl text-emerald-400 w-full rounded p-0.5 border border-slate-700 focus:outline-none focus:border-emerald-500">
                     `;
                 } else {
                     pBox.innerHTML = `
@@ -596,7 +636,6 @@
             if (clue.isDD) ddBanner.classList.remove('hidden');
             else ddBanner.classList.add('hidden');
 
-            // Determine active asset target based on answer visibility toggle state
             let type = gameState.showingAnswer ? clue.aMediaType : clue.qMediaType;
             let url = gameState.showingAnswer ? clue.aMediaUrl : clue.qMediaUrl;
 
@@ -634,7 +673,6 @@
                 textElement.className = "text-2xl md:text-4xl font-serif font-bold text-white text-center leading-relaxed mb-6";
             }
 
-            // Dynamic Scoring Layout Panel Generation
             const scorePanel = document.getElementById('modalScorePanel');
             scorePanel.innerHTML = '';
 
@@ -642,12 +680,13 @@
                 let targetValue = clue.value;
                 gameState.players.forEach((player, idx) => {
                     const row = document.createElement('div');
-                    row.className = "bg-slate-800 p-2 rounded border border-slate-700 text-center flex flex-col items-center justify-between";
+                    row.className = "bg-slate-800 p-2 rounded border border-slate-700 text-center flex flex-col items-center justify-between gap-1";
                     row.innerHTML = `
-                        <div class="text-xs font-medium text-slate-300 truncate w-full mb-1">${player.name}</div>
-                        <div class="flex gap-2">
-                            <button onclick="updateScore(${idx}, ${targetValue})" class="bg-emerald-600 hover:bg-emerald-500 text-xs px-2 py-1 rounded font-black text-white">+ $${targetValue}</button>
-                            <button onclick="updateScore(${idx}, -${targetValue})" class="bg-rose-600 hover:bg-rose-500 text-xs px-2 py-1 rounded font-black text-white">- $${targetValue}</button>
+                        <div class="text-xs font-bold text-slate-300 truncate w-full">${player.name}</div>
+                        <div class="text-sm font-black text-yellow-400 mb-1">Total: ${player.score}</div>
+                        <div class="flex gap-1">
+                            <button onclick="updateScore(${idx}, ${targetValue})" class="bg-emerald-600 hover:bg-emerald-500 text-[10px] px-1.5 py-1 rounded font-black text-white">+ $${targetValue}</button>
+                            <button onclick="updateScore(${idx}, -${targetValue})" class="bg-rose-600 hover:bg-rose-500 text-[10px] px-1.5 py-1 rounded font-black text-white">- $${targetValue}</button>
                         </div>
                     `;
                     scorePanel.appendChild(row);
